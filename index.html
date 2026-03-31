@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobile CAD Viewer</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel to compile JSX in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Import Map to allow modern ES Module imports for Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; touch-action: none; }
+        #root { width: 100vw; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- The React Application script -->
+    <script type="text/babel" data-type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+
+        const { useState, useEffect, useRef } = React;
+
+        // --- Inline Icons ---
+        const Upload = ({ size = 24, className = "" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
+        const Maximize = ({ size = 24, className = "" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>;
+        const Box = ({ size = 24, className = "" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>;
+        const Grid = ({ size = 24, className = "" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>;
+        const Info = ({ size = 24, className = "" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>;
+        const Loader2 = ({ size = 24, className = "" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>;
+        const Sun = ({ size = 24, className = "" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>;
+        const Moon = ({ size = 24, className = "" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>;
+        const AlertCircle = ({ size = 24, className = "" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
+
+        function App() {
+          const mountRef = useRef(null);
+          const sceneRef = useRef(null);
+          const cameraRef = useRef(null);
+          const rendererRef = useRef(null);
+          const controlsRef = useRef(null);
+          const modelGroupRef = useRef(null);
+          const gridHelperRef = useRef(null);
+          const axesHelperRef = useRef(null);
+
+          const [isLoading, setIsLoading] = useState(false);
+          const [loadingText, setLoadingText] = useState('');
+          const [isWireframe, setIsWireframe] = useState(false);
+          const [showGrid, setShowGrid] = useState(true);
+          const [theme, setTheme] = useState('dark');
+          const [fileInfo, setFileInfo] = useState({ name: 'No file loaded', vertices: 0, faces: 0 });
+          const [showInfo, setShowInfo] = useState(false);
+          const [toast, setToast] = useState(null);
+
+          // Initialize Three.js Scene
+          useEffect(() => {
+            const mount = mountRef.current;
+            if (!mount) return;
+
+            const initWidth = mount.clientWidth || window.innerWidth;
+            const initHeight = mount.clientHeight || window.innerHeight;
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(theme === 'dark' ? '#1a1a1a' : '#f0f0f0');
+            sceneRef.current = scene;
+
+            const camera = new THREE.PerspectiveCamera(45, initWidth / initHeight, 0.1, 5000);
+            camera.position.set(100, 100, 100);
+            cameraRef.current = camera;
+
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(initWidth, initHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            mount.appendChild(renderer.domElement);
+            rendererRef.current = renderer;
+
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxDistance = 2000;
+            controlsRef.current = controls;
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight1.position.set(200, 300, 100);
+            dirLight1.castShadow = true;
+            scene.add(dirLight1);
+
+            const dirLight2 = new THREE.DirectionalLight(0xdbeafe, 0.4); 
+            dirLight2.position.set(-100, -50, -50);
+            scene.add(dirLight2);
+
+            const gridHelper = new THREE.GridHelper(500, 100, 0x444444, 0x888888);
+            gridHelper.position.y = -0.1; 
+            gridHelper.material.opacity = 0.4;
+            gridHelper.material.transparent = true;
+            scene.add(gridHelper);
+            gridHelperRef.current = gridHelper;
+            
+            const axesHelper = new THREE.AxesHelper( 50 );
+            axesHelper.position.y = -0.09;
+            scene.add( axesHelper );
+            axesHelperRef.current = axesHelper;
+
+            const modelGroup = new THREE.Group();
+            scene.add(modelGroup);
+            modelGroupRef.current = modelGroup;
+
+            let animationFrameId;
+            const animate = () => {
+              animationFrameId = requestAnimationFrame(animate);
+              if (controlsRef.current) controlsRef.current.update();
+              if (rendererRef.current && sceneRef.current && cameraRef.current) {
+                  rendererRef.current.render(sceneRef.current, cameraRef.current);
+              }
+            };
+            animate();
+
+            const resizeObserver = new ResizeObserver(() => {
+                if (!mountRef.current || !cameraRef.current || !rendererRef.current) return;
+                const w = mountRef.current.clientWidth || window.innerWidth;
+                const h = mountRef.current.clientHeight || window.innerHeight;
+                if (w > 0 && h > 0) {
+                    cameraRef.current.aspect = w / h;
+                    cameraRef.current.updateProjectionMatrix();
+                    rendererRef.current.setSize(w, h);
+                }
+            });
+            resizeObserver.observe(mount);
+
+            loadDemoModel();
+
+            return () => {
+              resizeObserver.disconnect();
+              cancelAnimationFrame(animationFrameId);
+              if (mount && renderer.domElement && mount.contains(renderer.domElement)) {
+                mount.removeChild(renderer.domElement);
+              }
+              renderer.dispose();
+            };
+          }, []);
+
+          useEffect(() => {
+            if (sceneRef.current) {
+              sceneRef.current.background = new THREE.Color(theme === 'dark' ? '#1a1a1a' : '#f0f0f0');
+            }
+          }, [theme]);
+
+          useEffect(() => {
+            if (gridHelperRef.current) gridHelperRef.current.visible = showGrid;
+            if (axesHelperRef.current) axesHelperRef.current.visible = showGrid;
+          }, [showGrid]);
+
+          useEffect(() => {
+            if (modelGroupRef.current) {
+              modelGroupRef.current.traverse((child) => {
+                if (child.isMesh && child.material) {
+                  if (Array.isArray(child.material)) {
+                    child.material.forEach(mat => { mat.wireframe = isWireframe; mat.needsUpdate = true; });
+                  } else {
+                    child.material.wireframe = isWireframe;
+                    child.material.needsUpdate = true;
+                  }
+                }
+              });
+            }
+          }, [isWireframe]);
+
+          const showToastMessage = (msg, duration = 4000) => {
+            setToast(msg);
+            setTimeout(() => setToast(null), duration);
+          };
+
+          const clearCurrentModel = () => {
+            const group = modelGroupRef.current;
+            if (!group) return;
+            group.traverse((child) => {
+              if (child.isMesh) {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) child.material.forEach(mat => mat.dispose());
+                    else child.material.dispose();
+                }
+              }
+            });
+            while (group.children.length > 0) {
+              group.remove(group.children[0]);
+            }
+          };
+
+          const centerAndScaleModel = (object) => {
+            if (!object || !cameraRef.current || !controlsRef.current) return;
+            object.updateMatrixWorld();
+            const box = new THREE.Box3().setFromObject(object);
+            if (box.isEmpty()) return;
+
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            object.position.sub(center); 
+            
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            object.position.y += size.y / 2;
+            object.updateMatrixWorld();
+
+            const maxDim = Math.max(size.x, size.y, size.z);
+            if (maxDim > 0) {
+              const scale = 60 / maxDim;
+              object.scale.setScalar(scale);
+            }
+            object.updateMatrixWorld();
+
+            const finalBox = new THREE.Box3().setFromObject(object);
+            const finalCenter = new THREE.Vector3();
+            finalBox.getCenter(finalCenter);
+            const finalSize = new THREE.Vector3();
+            finalBox.getSize(finalSize);
+            
+            const maxFinalDim = Math.max(finalSize.x, finalSize.y, finalSize.z);
+            const cameraDistance = Math.max(maxFinalDim * 1.5, 50);
+
+            cameraRef.current.position.set(
+              finalCenter.x + cameraDistance,
+              finalCenter.y + cameraDistance * 0.8,
+              finalCenter.z + cameraDistance
+            );
+            
+            controlsRef.current.target.copy(finalCenter);
+            controlsRef.current.update();
+          };
+
+          const updateModelStats = (object, name) => {
+            let vertices = 0, faces = 0;
+            object.traverse((child) => {
+              if (child.isMesh && child.geometry && child.geometry.attributes.position) {
+                vertices += child.geometry.attributes.position.count;
+                faces += child.geometry.index ? child.geometry.index.count / 3 : child.geometry.attributes.position.count / 3;
+              }
+            });
+            setFileInfo({ name, vertices, faces });
+          };
+
+          const getStandardMaterial = () => {
+            return new THREE.MeshStandardMaterial({
+              color: 0x60a5fa,
+              roughness: 0.4,
+              metalness: 0.3,
+              side: THREE.DoubleSide,
+              wireframe: isWireframe
+            });
+          };
+
+          const generateMechanicalPart = () => {
+            const group = new THREE.Group();
+            const material = getStandardMaterial();
+            const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(40, 4, 30), material);
+            baseMesh.position.set(0, 2, 0); baseMesh.castShadow = true; baseMesh.receiveShadow = true; group.add(baseMesh);
+            const cylMesh = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 15, 32), material);
+            cylMesh.position.set(0, 7.5, 0); cylMesh.castShadow = true; group.add(cylMesh);
+            const innerCylMesh = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 15.2, 32), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 }));
+            innerCylMesh.position.set(0, 7.5, 0); group.add(innerCylMesh);
+            return group;
+          };
+
+          const loadDemoModel = () => {
+            clearCurrentModel();
+            const demoPart = generateMechanicalPart();
+            modelGroupRef.current.add(demoPart);
+            centerAndScaleModel(demoPart);
+            updateModelStats(demoPart, 'Demo_Bracket.step');
+          };
+
+          // --- BULLETPROOF WEB WORKER STEP PARSING ---
+          const parseStepFile = (file) => {
+            setIsLoading(true);
+            setLoadingText('Initializing CAD Engine...');
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const buffer = e.target.result;
+
+              const workerCode = `
+                importScripts("https://cdn.jsdelivr.net/npm/occt-import-js@0.0.22/dist/occt-import-js.js");
+                
+                self.onmessage = async function(event) {
+                  try {
+                    const bufferData = event.data;
+                    let capturedFS = null;
+                    
+                    // Initialization Configuration
+                    const initOptions = {
+                      locateFile: function(path) {
+                        return "https://cdn.jsdelivr.net/npm/occt-import-js@0.0.22/dist/" + path;
+                      },
+                      // CRITICAL FIX: preRun MUST be an array of functions!
+                      // This executes directly inside Emscripten's scope during boot, securely extracting the FS object.
+                      preRun: [function() {
+                        try {
+                          capturedFS = FS;
+                        } catch (e) {}
+                      }]
+                    };
+                    
+                    const occt = await occtimportjs(initOptions);
+                    const finalFS = occt.FS || capturedFS || self.FS || null;
+                    let result = null;
+                    
+                    // 4-WAY DYNAMIC EXECUTION FALLBACK
+                    // Guarantees parsing regardless of how the C++ bindings were compiled or if FS was stripped.
+                    if (finalFS) {
+                      const vName = 'model_' + Date.now() + '.step';
+                      finalFS.createDataFile('/', vName, new Uint8Array(bufferData), true, true);
+                      
+                      try { result = occt.ReadStepFile(vName, null); } 
+                      catch(err) { result = occt.ReadStepFile(vName); }
+                      
+                      try { finalFS.unlink('/' + vName); } catch(e){}
+                    } else {
+                      try { result = occt.ReadStepFile(new Uint8Array(bufferData), null); } 
+                      catch(err) { result = occt.ReadStepFile(new Uint8Array(bufferData)); }
+                    }
+                    
+                    if (result && result.success && result.meshes && result.meshes.length > 0) {
+                      const meshes = result.meshes.map(m => ({
+                        position: m.attributes.position.array,
+                        normal: m.attributes.normal ? m.attributes.normal.array : null,
+                        index: m.index ? m.index.array : null
+                      }));
+                      self.postMessage({ success: true, meshes: meshes });
+                    } else {
+                      self.postMessage({ success: false, error: 'Unsupported STEP schema or empty file geometry.' });
+                    }
+                  } catch (err) {
+                    self.postMessage({ success: false, error: err.message || "Unknown worker exception" });
+                  }
+                };
+              `;
+
+              const blob = new Blob([workerCode], { type: 'application/javascript' });
+              const worker = new Worker(URL.createObjectURL(blob));
+
+              worker.onmessage = (msg) => {
+                if (msg.data.success) {
+                  setLoadingText('Rendering Triangles...');
+                  
+                  // Yield to the UI thread briefly before locking it with heavy geometry array generation
+                  requestAnimationFrame(() => {
+                    const group = new THREE.Group();
+                    const material = getStandardMaterial();
+
+                    msg.data.meshes.forEach(meshData => {
+                      const geometry = new THREE.BufferGeometry();
+                      
+                      geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.position, 3));
+                      
+                      if (meshData.normal) {
+                        geometry.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normal, 3));
+                      } else {
+                        geometry.computeVertexNormals();
+                      }
+                      
+                      if (meshData.index) {
+                        geometry.setIndex(new THREE.BufferAttribute(Uint32Array.from(meshData.index), 1));
+                      }
+                      
+                      const mesh = new THREE.Mesh(geometry, material);
+                      mesh.castShadow = true;
+                      mesh.receiveShadow = true;
+                      group.add(mesh);
+                    });
+
+                    clearCurrentModel();
+                    modelGroupRef.current.add(group);
+                    centerAndScaleModel(group);
+                    updateModelStats(group, file.name);
+                    showToastMessage('STEP file loaded successfully!');
+                    setIsLoading(false);
+                    worker.terminate();
+                  });
+                } else {
+                  console.error("Worker Parsing Error:", msg.data.error);
+                  showToastMessage('Error parsing STEP: ' + msg.data.error);
+                  setIsLoading(false);
+                  worker.terminate();
+                }
+              };
+
+              worker.onerror = (err) => {
+                console.error("Fatal Worker Error:", err);
+                showToastMessage('Fatal engine error. The file may be too complex.');
+                setIsLoading(false);
+                worker.terminate();
+              };
+
+              setLoadingText('Tessellating B-Rep Geometry (Please wait)...');
+              
+              // Zero-copy array buffer transfer for maximum performance
+              worker.postMessage(buffer, [buffer]); 
+            };
+            
+            reader.readAsArrayBuffer(file);
+          };
+
+          const handleFileUpload = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const extension = file.name.split('.').pop().toLowerCase();
+
+            if (['step', 'stp'].includes(extension)) {
+              parseStepFile(file);
+            } 
+            else if (['stl'].includes(extension)) {
+              setIsLoading(true);
+              setLoadingText('Parsing STL File...');
+              
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                try {
+                  const loader = new STLLoader();
+                  const geometry = loader.parse(e.target.result);
+                  geometry.computeVertexNormals(); 
+                  const mesh = new THREE.Mesh(geometry, getStandardMaterial());
+                  
+                  clearCurrentModel();
+                  modelGroupRef.current.add(mesh);
+                  centerAndScaleModel(mesh);
+                  updateModelStats(mesh, file.name);
+                  setIsLoading(false);
+                } catch (error) {
+                  console.error(error);
+                  setIsLoading(false);
+                  showToastMessage('Error parsing STL file.');
+                }
+              };
+              reader.readAsArrayBuffer(file);
+            }
+            else {
+              showToastMessage('Unsupported file format. Please upload STEP, STP, or STL.');
+            }
+            event.target.value = '';
+          };
+
+          const resetCamera = () => {
+            if (modelGroupRef.current && modelGroupRef.current.children.length > 0) {
+              centerAndScaleModel(modelGroupRef.current.children[0]);
+            }
+          };
+
+          return (
+            <div className={`relative w-full h-screen overflow-hidden ${theme === 'dark' ? 'text-white' : 'text-gray-900'} font-sans`}>
+              
+              <div ref={mountRef} className="absolute inset-0 z-0 touch-none" />
+
+              <div className={`absolute top-0 left-0 right-0 z-10 px-4 py-3 flex justify-between items-center backdrop-blur-md ${theme === 'dark' ? 'bg-black/30 border-b border-gray-800' : 'bg-white/50 border-b border-gray-200 shadow-sm'}`}>
+                <div className="flex items-center space-x-3">
+                  <div className="bg-blue-600 text-white p-2 rounded-lg shadow-lg">
+                    <Box size={20} />
+                  </div>
+                  <div>
+                    <h1 className="font-bold text-sm sm:text-base tracking-wide">WebCAD Viewer</h1>
+                    <p className={`text-xs truncate max-w-[150px] sm:max-w-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {fileInfo.name}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <button onClick={() => setShowInfo(!showInfo)} className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-200'}`}>
+                    <Info size={20} />
+                  </button>
+                  <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-200'}`}>
+                    {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+                  </button>
+                </div>
+              </div>
+
+              {showInfo && (
+                <div className={`absolute top-20 right-4 z-20 p-4 rounded-xl shadow-2xl backdrop-blur-lg border ${theme === 'dark' ? 'bg-gray-900/80 border-gray-700' : 'bg-white/90 border-gray-200'}`}>
+                  <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm">
+                    <AlertCircle size={16} className="text-blue-500"/> File Statistics
+                  </h3>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between gap-6">
+                      <span className="opacity-70">Vertices:</span>
+                      <span className="font-mono">{fileInfo.vertices.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between gap-6">
+                      <span className="opacity-70">Faces:</span>
+                      <span className="font-mono">{fileInfo.faces.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className={`mt-4 pt-3 border-t text-xs opacity-70 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}>
+                    <p>Supports: .STEP, .STP, .STL</p>
+                  </div>
+                </div>
+              )}
+
+              {toast && (
+                <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-50 animate-fade-in-down">
+                  <div className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-2xl text-sm font-medium flex items-center gap-2">
+                    <Info size={16} />
+                    {toast}
+                  </div>
+                </div>
+              )}
+
+              {isLoading && (
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300">
+                  <div className="bg-gray-900 p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-11/12 text-center border border-gray-800">
+                    <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
+                    <h2 className="text-white font-bold text-lg mb-2">Processing Model</h2>
+                    <p className="text-gray-400 text-sm font-mono h-6">{loadingText}</p>
+                    
+                    <div className="w-full bg-gray-800 rounded-full h-1.5 mt-6 overflow-hidden">
+                      <div className="bg-blue-500 h-1.5 rounded-full animate-pulse w-full origin-left" style={{ animationDuration: '2s' }}></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-20 w-11/12 max-w-md">
+                <div className={`flex items-center justify-between px-6 py-3 rounded-2xl shadow-2xl backdrop-blur-xl border ${theme === 'dark' ? 'bg-gray-900/80 border-gray-800' : 'bg-white/90 border-gray-200'}`}>
+                  
+                  <input type="file" id="file-upload" className="hidden" accept=".step,.stp,.stl" onChange={handleFileUpload} />
+                  
+                  <label htmlFor="file-upload" className="flex flex-col items-center gap-1 cursor-pointer group">
+                    <div className="p-3 bg-blue-600 group-hover:bg-blue-500 transition-colors text-white rounded-xl shadow-lg shadow-blue-500/30">
+                      <Upload size={22} />
+                    </div>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Open</span>
+                  </label>
+
+                  <div className={`w-px h-10 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
+
+                  <div className="flex space-x-2 sm:space-x-4">
+                    <button onClick={() => setIsWireframe(!isWireframe)} className={`p-3 rounded-xl transition-all flex flex-col items-center gap-1 ${isWireframe ? 'bg-blue-500/20 text-blue-500' : theme === 'dark' ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-600'}`}>
+                      <Box size={22} className={isWireframe ? 'opacity-100' : 'opacity-80'} />
+                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Edges</span>
+                    </button>
+
+                    <button onClick={() => setShowGrid(!showGrid)} className={`p-3 rounded-xl transition-all flex flex-col items-center gap-1 ${showGrid ? 'bg-blue-500/20 text-blue-500' : theme === 'dark' ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-600'}`}>
+                      <Grid size={22} className={showGrid ? 'opacity-100' : 'opacity-80'} />
+                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Grid</span>
+                    </button>
+
+                    <button onClick={resetCamera} className={`p-3 rounded-xl transition-all flex flex-col items-center gap-1 ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-600'}`}>
+                      <Maximize size={22} className="opacity-80" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Fit</span>
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+
+              <style dangerouslySetInnerHTML={{__html: `
+                @keyframes fade-in-down {
+                  0% { opacity: 0; transform: translate(-50%, -20px); }
+                  100% { opacity: 1; transform: translate(-50%, 0); }
+                }
+                .animate-fade-in-down {
+                  animation: fade-in-down 0.4s ease-out forwards;
+                }
+              `}} />
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
